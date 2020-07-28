@@ -296,44 +296,41 @@ static void update_frontend(struct xen_device *xendev, char *node)
 void backend_xenstore_handler(void *unused)
 {
     char **w;
-    unsigned int count;
     void *p;
     int rc;
     char *node;
 
     (void)unused;
 
-    w = xs_read_watch(xs_handle, &count);
-    if (!w)
-        return;
+    w = xs_check_watch(xs_handle);
+    while (w != NULL) {
+        rc = sscanf(w[XS_WATCH_TOKEN], MAGIC_STRING"%p", &p);
+        if (rc == 1) {
+            if (!strncmp(w[XS_WATCH_PATH], domain_path, domain_path_len)) {
+                int devid;
+                struct xen_backend *xenback = p;
 
-    rc = sscanf(w[XS_WATCH_TOKEN], MAGIC_STRING"%p", &p);
-    if (rc != 1)
-        return;
+                devid = get_devid_from_path(xenback, w[XS_WATCH_PATH]);
+                if (devid != -1) {
+                    update_device(xenback, devid, w[XS_WATCH_PATH]);
+                }
+                scan_devices(xenback);
+            } else {
+                struct xen_device *xendev = p;
 
-    if (!strncmp(w[XS_WATCH_PATH], domain_path, domain_path_len)) {
-        int devid;
-        struct xen_backend *xenback = p;
-
-        devid = get_devid_from_path(xenback, w[XS_WATCH_PATH]);
-        if (devid != -1) {
-            update_device(xenback, devid, w[XS_WATCH_PATH]);
+                /*
+                ** Ensure that the xenstore handler has not been called *after*
+                ** unwatching the node. (yes, yes, it happens...)
+                */
+                if (xendev->dev) {
+                    node = get_node_from_path(xendev->fe, w[XS_WATCH_PATH]);
+                    update_frontend(xendev, node);
+                }
+            }
         }
-        scan_devices(xenback);
-    } else {
-        struct xen_device *xendev = p;
-
-        /*
-        ** Ensure that the xenstore handler has not been called *after*
-        ** unwatching the node. (yes, yes, it happens...)
-        */
-        if (xendev->dev) {
-            node = get_node_from_path(xendev->fe, w[XS_WATCH_PATH]);
-            update_frontend(xendev, node);
-        }
+        free(w);
+        w = xs_check_watch(xs_handle);
     }
-
-    free(w);
 }
 
 int backend_xenstore_fd(void)
