@@ -296,14 +296,13 @@ static void update_frontend(struct xen_device *xendev, char *node)
 void backend_xenstore_handler(void *unused)
 {
     char **w;
-    unsigned int count;
     void *p;
     int rc;
     char *node;
 
     (void)unused;
 
-    w = xs_read_watch(xs_handle, &count);
+    w = xs_check_watch(xs_handle);
     if (!w)
         return;
 
